@@ -1,88 +1,110 @@
-#include <util/atomic.h> // For the ATOMIC_BLOCK macro
+// Left encoder pins
+#define ENCA_L 3
+#define ENCB_L 2
 
-#define ENCA 3 // YELLOW
-#define ENCB 2 // WHITE
-#define PWM 5
-#define IN2 6
-#define IN1 7
+// Right encoder pins
+#define ENCA_R 5
+#define ENCB_R 4
 
-volatile int posi = 0; // specify posi as volatile: https://www.arduino.cc/reference/en/language/variables/variable-scope-qualifiers/volatile/
-long prevT = 0;
-float eprev = 0;
-float eintegral = 0;
+// Left motor pins
+#define PWM_L 9
+#define IN2_L 6
+#define IN1_L 7
+
+// Right motor pins
+#define PWM_R 10
+#define IN2_R 11
+#define IN1_R 12
+
+volatile int posL = 0; // volatile: https://www.arduino.cc/reference/en/language/variables/variable-scope-qualifiers/volatile/
+volatile int posR = 0;
+
+int safePosL = 0;
+int safePosR = 0;
+
+// Kinematics
+double px = 500;
+double py = 500;
+double L1 = 0; // Length of left string mm
+double L2 = 1000; // Length of right string mm
+const double c = 1000; // Length of top aluminium bar mm
+const double circumference = 138.23; // Circumference of string wheel mm
+const double encoderCircumferenceRatio = circumference/342;
+
+bool jobDone = false;
 
 void setup() {
   Serial.begin(9600);
-  pinMode(ENCA,INPUT);
-  pinMode(ENCB,INPUT);
-  attachInterrupt(digitalPinToInterrupt(ENCA),readEncoder,RISING);
+
+  // Left encoder setup
+  pinMode(ENCA_L,INPUT);
+  pinMode(ENCB_L,INPUT);
+  attachInterrupt(digitalPinToInterrupt(ENCA_L),encoder_ISR_L,RISING);
+
+  // Right encoder setup
+  pinMode(ENCA_R,INPUT);
+  pinMode(ENCB_R,INPUT);
+  attachInterrupt(digitalPinToInterrupt(ENCA_R),encoder_ISR_R,RISING);
   
-  pinMode(PWM,OUTPUT);
-  pinMode(IN1,OUTPUT);
-  pinMode(IN2,OUTPUT);
-  
-  Serial.println("target pos");
+  // Left motor controller setup
+  pinMode(PWM_L,OUTPUT);
+  pinMode(IN1_L,OUTPUT);
+  pinMode(IN2_L,OUTPUT);
+
+  // Right motor controller setup
+  pinMode(PWM_R,OUTPUT);
+  pinMode(IN1_R,OUTPUT);
+  pinMode(IN2_R,OUTPUT);
 }
 
 void loop() {
 
-  // set target position
-  //int target = 1200;
-  int target = 2500*sin(prevT/1e6);
 
-  // PID constants
-  float kp = 1;
-  float kd = 0.025;
-  float ki = 0.0;
 
-  // time difference
-  long currT = micros();
-  float deltaT = ((float) (currT - prevT))/( 1.0e6 );
-  prevT = currT;
+  goSomeplace();
+}
 
-  // Read the position in an atomic block to avoid a potential
-  // misread if the interrupt coincides with this code running
-  // see: https://www.arduino.cc/reference/en/language/variables/variable-scope-qualifiers/volatile/
-  int pos = 0; 
-  noInterrupts(); // Disable interrupts
-  pos = posi;
-  interrupts(); // Enable interrupts
+void goSomeplace()
+{
+  if(!jobDone)
+  {
+
+  L1 = sqrt(px*px+py*py) - L1;
+  L2 = sqrt((c-px)*(c-px)+py*py) - L2;
+
+  Serial.print("L1 = ");
+  Serial.println(L1);
+  Serial.print("L2 = ");
+  Serial.println(L2);
+
   
-  // error
-  int e = pos - target;
 
-  // derivative
-  float dedt = (e-eprev)/(deltaT);
+  while (safePosL*encoderCircumferenceRatio <= L1)
+  {
+  Serial.println("Inside while loop");
+  // Interrupt handling
+  safePosL = 0;
+  safePosR = 0;
+  noInterrupts(); // Disable interrupts
+  safePosL = posL;
+  safePosR = posR;
+  interrupts(); // Enable interrupts
+  setMotor(-1, 150, PWM_L, IN1_L, IN2_L);
+  Serial.println(safePosL*encoderCircumferenceRatio);
+  Serial.println(L1);
 
-  // integral
-  eintegral = eintegral + e*deltaT;
-
-  // control signal
-  float u = kp*e + kd*dedt + ki*eintegral;
-
-  // motor power
-  float pwr = fabs(u);
-  if( pwr > 255 ){
-    pwr = 255;
+  if (safePosL*4 >= L1)
+  {
+    setMotor(2, 0, PWM_L, IN1_L, IN2_L);
   }
-
-  // motor direction
-  int dir = 1;
-  if(u<0){
-    dir = -1;
+  
   }
+  
+  Serial.println("Outside while loop");
 
-  // signal the motor
-  setMotor(dir,pwr,PWM,IN1,IN2);
 
-
-  // store previous error
-  eprev = e;
-
-  Serial.print(target);
-  Serial.print(" ");
-  Serial.print(pos);
-  Serial.println();
+  jobDone = true;
+  }
 }
 
 void setMotor(int dir, int pwmVal, int pwm, int in1, int in2){
@@ -101,12 +123,22 @@ void setMotor(int dir, int pwmVal, int pwm, int in1, int in2){
   }  
 }
 
-void readEncoder(){
-  int b = digitalRead(ENCB);
+void encoder_ISR_L(){
+  int b = digitalRead(ENCB_L);
   if(b > 0){
-    posi++;
+    posL++;
   }
   else{
-    posi--;
+    posL--;
+  }
+}
+
+void encoder_ISR_R(){
+  int c = digitalRead(ENCB_R);
+  if(c > 0){
+    posR++;
+  }
+  else{
+    posR--;
   }
 }
