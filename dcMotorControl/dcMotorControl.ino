@@ -1,15 +1,15 @@
 // Left encoder pins
-#define ENCA_L 3
+#define ENCA_L 13
 #define ENCB_L 2
 
 // Right encoder pins
-#define ENCA_R 5
-#define ENCB_R 4
+#define ENCA_R 13
+#define ENCB_R 3
 
 // Left motor pins
 #define PWM_L 9
-#define IN2_L 6
-#define IN1_L 7
+#define IN2_L 5
+#define IN1_L 4
 
 // Right motor pins
 #define PWM_R 10
@@ -39,12 +39,12 @@ void setup() {
   // Left encoder setup
   pinMode(ENCA_L,INPUT);
   pinMode(ENCB_L,INPUT);
-  attachInterrupt(digitalPinToInterrupt(ENCA_L),encoder_ISR_L,RISING);
+  attachInterrupt(digitalPinToInterrupt(ENCB_L),encoder_ISR_L,RISING);
 
   // Right encoder setup
   pinMode(ENCA_R,INPUT);
   pinMode(ENCB_R,INPUT);
-  attachInterrupt(digitalPinToInterrupt(ENCA_R),encoder_ISR_R,RISING);
+  attachInterrupt(digitalPinToInterrupt(ENCB_R),encoder_ISR_R,RISING);
   
   // Left motor controller setup
   pinMode(PWM_L,OUTPUT);
@@ -84,19 +84,32 @@ void goSomeplace()
   Serial.println("Inside while loop");
   // Interrupt handling
   safePosL = 0;
-  safePosR = 0;
   noInterrupts(); // Disable interrupts
   safePosL = posL;
-  safePosR = posR;
   interrupts(); // Enable interrupts
   setMotor(-1, 150, PWM_L, IN1_L, IN2_L);
   Serial.println(safePosL*encoderCircumferenceRatio);
   Serial.println(L1);
 
-  if (safePosL*4 >= L1)
+  if (safePosL*encoderCircumferenceRatio >= L1)
   {
     setMotor(2, 0, PWM_L, IN1_L, IN2_L);
-  }
+    while (safePosR*encoderCircumferenceRatio <= L1)
+    {
+      Serial.println("Inside while loop22");
+      // Interrupt handling
+      safePosR = 0;
+      noInterrupts(); // Disable interrupts
+      safePosR = posR;
+      interrupts(); // Enable interrupts
+      setMotor(1, 150, PWM_R, IN1_R, IN2_R);
+      Serial.println(safePosR*encoderCircumferenceRatio);
+      Serial.println(L1);
+        if (safePosR*encoderCircumferenceRatio >= L1)
+        {
+          setMotor(2, 0, PWM_R, IN1_R, IN2_R);
+        }
+    }
   
   }
   
@@ -105,6 +118,7 @@ void goSomeplace()
 
   jobDone = true;
   }
+}
 }
 
 void setMotor(int dir, int pwmVal, int pwm, int in1, int in2){
@@ -122,6 +136,8 @@ void setMotor(int dir, int pwmVal, int pwm, int in1, int in2){
     digitalWrite(in2,LOW);
   }  
 }
+
+
 
 void encoder_ISR_L(){
   int b = digitalRead(ENCB_L);
