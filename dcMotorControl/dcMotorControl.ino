@@ -23,11 +23,11 @@ int safePosL = 0;
 int safePosR = 0;
 
 // Kinematics
-double px = 500;
+double px = 2640/2;
 double py = 500;
 double L1 = 0; // Length of left string mm
-double L2 = 1000; // Length of right string mm
-const double c = 1000; // Length of top aluminium bar mm
+double L2 = 2940; // Length of right string mm
+const double c = 2940; // Length of top aluminium bar mm
 const double circumference = 138.23; // Circumference of string wheel mm
 const double encoderCircumferenceRatio = circumference/342;
 
@@ -60,7 +60,7 @@ void setup() {
 void loop() {
 
 
-
+  //teleport();
   goSomeplace();
 }
 
@@ -81,22 +81,22 @@ void goSomeplace()
 
   while (safePosL*encoderCircumferenceRatio <= L1)
   {
-  Serial.println("Inside while loop");
+  Serial.println("Inside while loop 1");
   // Interrupt handling
   safePosL = 0;
   noInterrupts(); // Disable interrupts
   safePosL = posL;
   interrupts(); // Enable interrupts
-  setMotor(-1, 150, PWM_L, IN1_L, IN2_L);
+  setMotor(1, 150, PWM_L, IN1_L, IN2_L);
   Serial.println(safePosL*encoderCircumferenceRatio);
   Serial.println(L1);
 
   if (safePosL*encoderCircumferenceRatio >= L1)
   {
     setMotor(2, 0, PWM_L, IN1_L, IN2_L);
-    while (safePosR*encoderCircumferenceRatio <= L1)
+    while (safePosR*encoderCircumferenceRatio >= L2)
     {
-      Serial.println("Inside while loop22");
+      Serial.println("Inside while loop 2");
       // Interrupt handling
       safePosR = 0;
       noInterrupts(); // Disable interrupts
@@ -104,8 +104,8 @@ void goSomeplace()
       interrupts(); // Enable interrupts
       setMotor(1, 150, PWM_R, IN1_R, IN2_R);
       Serial.println(safePosR*encoderCircumferenceRatio);
-      Serial.println(L1);
-        if (safePosR*encoderCircumferenceRatio >= L1)
+      Serial.println(L2);
+        if (safePosR*encoderCircumferenceRatio <= L2)
         {
           setMotor(2, 0, PWM_R, IN1_R, IN2_R);
         }
@@ -137,7 +137,44 @@ void setMotor(int dir, int pwmVal, int pwm, int in1, int in2){
   }  
 }
 
-
+void teleport()
+{
+  unsigned long startTime = millis();
+  int runtime = 500;
+  if (Serial.available() > 0) {
+    int inData = Serial.read();
+    if (inData == 'j')
+    {
+      while (startTime + runtime > millis() )
+      {
+        setMotor(1, 150, PWM_L, IN1_L, IN2_L);
+      }
+      setMotor(2, 150, PWM_L, IN1_L, IN2_L);
+      
+    }else if(inData == 'n')
+    {
+       while (startTime + runtime > millis() )
+      {
+        setMotor(-1, 150, PWM_L, IN1_L, IN2_L);
+      }
+      setMotor(2, 150, PWM_L, IN1_L, IN2_L);
+    }else if(inData == 'k')
+    {
+       while (startTime + runtime > millis() )
+      {
+        setMotor(1, 150, PWM_R, IN1_R, IN2_R);
+      }
+      setMotor(2, 150, PWM_R, IN1_R, IN2_R);
+    }else if(inData == 'm')
+    {
+       while (startTime + runtime > millis() )
+      {
+        setMotor(-1, 150, PWM_R, IN1_R, IN2_R);
+      }
+      setMotor(2, 150, PWM_R, IN1_R, IN2_R);
+    }
+  }
+}
 
 void encoder_ISR_L(){
   int b = digitalRead(ENCB_L);
@@ -152,9 +189,9 @@ void encoder_ISR_L(){
 void encoder_ISR_R(){
   int c = digitalRead(ENCB_R);
   if(c > 0){
-    posR++;
+    posR--;
   }
   else{
-    posR--;
+    posR++;
   }
 }
