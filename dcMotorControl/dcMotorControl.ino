@@ -1,21 +1,25 @@
+#include <util/atomic.h> // For the ATOMIC_BLOCK macro
+
 // Left encoder pins
-#define ENCB_L 2
+#define ENCA_L 18
+#define ENCB_L 19
 
 // Right encoder pins
-#define ENCB_R 3
+#define ENCA_R 3
+#define ENCB_R 2
 
 // Left motor pins
-#define PWM_L 9
-#define IN2_L 5
-#define IN1_L 4
+#define PWM_L 7
+#define IN2_L 8
+#define IN1_L 9
 
 // Right motor pins
-#define PWM_R 10
-#define IN2_R 11
-#define IN1_R 12
+#define PWM_R 4
+#define IN2_R 5
+#define IN1_R 6
 
 volatile int posL = 0; // volatile: https://www.arduino.cc/reference/en/language/variables/variable-scope-qualifiers/volatile/
-volatile int posR = -6574;
+volatile int posR = 0;//4982; // Encoder count at (0, 0)
 
 int safePosL = 0;
 int safePosR = 0;
@@ -24,13 +28,17 @@ int leftDir = 1;
 int rightDir = 1;
 
 // Kinematics
-double px = 1435;
-double py = 200;
+#define PI 3.14159265359
+
+double px = 100;
+double py = -100;
 double L1 = 0; // Length of left string mm
-double L2 = 2870; // Length of right string mm
-const double c = 2870; // Length of top aluminium bar mm
-const double circumference = 138.23; // Circumference of string wheel mm
-const double encoderCircumferenceRatio = circumference/342;
+double L2 = 2330; // Length of right string mm
+const double c = 2310; // Length of top aluminium bar mm
+const double r = 20; // Radius of wire wheel in mm
+const double circumference = 2*PI*r; // Circumference of string wheel mm (2*pi*r)
+const double encoderCountsPerRev = 310;
+const double encoderCircumferenceRatio = circumference/encoderCountsPerRev;
 
 bool jobDone = false;
 
@@ -38,12 +46,14 @@ void setup() {
   Serial.begin(9600);
 
   // Left encoder setup
+  pinMode(ENCA_L,INPUT);
   pinMode(ENCB_L,INPUT);
-  attachInterrupt(digitalPinToInterrupt(ENCB_L),encoder_ISR_L,RISING);
+  attachInterrupt(digitalPinToInterrupt(ENCA_L),encoder_ISR_L,RISING);
 
   // Right encoder setup
+  pinMode(ENCA_R,INPUT);
   pinMode(ENCB_R,INPUT);
-  attachInterrupt(digitalPinToInterrupt(ENCB_R),encoder_ISR_R,RISING);
+  attachInterrupt(digitalPinToInterrupt(ENCA_R),encoder_ISR_R,RISING);
   
   // Left motor controller setup
   pinMode(PWM_L,OUTPUT);
@@ -62,58 +72,8 @@ void loop() {
   //delay(1000);
   //jobDone = false;
   //goHome();
-  getEncoderVals();
-  
-}
-
-void goHome()
-{
-  if(!jobDone)
-  {
-  while (safePosL > 0 || safePosR > -6574)
-  {
-    // Interrupt handling
-    safePosL = 0;
-    safePosR = 0;
-    noInterrupts(); // Disable interrupts
-    safePosL = posL;
-    safePosR = posR;
-    interrupts(); // Enable interrupts
-
-
-    setMotor(-leftDir, 150, PWM_L, IN1_L, IN2_L);
-    Serial.println(safePosL);
-    Serial.println(safePosR);
-    setMotor(-rightDir, 150, PWM_R, IN1_R, IN2_R);
-
-    if (safePosL > 0)
-    {
-      setMotor(leftDir, 0, PWM_L, IN1_L, IN2_L);
-    }
-    if (safePosR > -6574)
-    {
-      setMotor(rightDir, 0, PWM_R, IN1_R, IN2_R);
-    }
-  }
-  jobDone = true;
-  }
-}
-
-void getEncoderVals()
-{
-// Interrupt handling
-  safePosL = 0;
-  safePosR = 0;
-  noInterrupts(); // Disable interrupts
-  safePosL = posL;
-  safePosR = posR;
-  interrupts(); // Enable interrupts
-
-  Serial.print("posL = ");
-  Serial.print(posL);
-  Serial.print(" ");
-  Serial.print("posR = ");
-  Serial.println(posR);
+  //getEncoderVals();
+  runEncoder();
 }
 
 void goSomeplace()
@@ -136,10 +96,10 @@ void goSomeplace()
 
   if (L1 < 0)
   {
-    leftDir = -1;
-  }else if (L1 < 0)
-  {
     leftDir = 1;
+  }else if (L1 > 0)
+  {
+    leftDir = -1;
   }
 
   if (L2 > 0)
@@ -153,6 +113,50 @@ void goSomeplace()
   while (safePosL*encoderCircumferenceRatio <= L1 || safePosR*encoderCircumferenceRatio >= L2)
   {
     // Interrupt handling
+    noInterrupts(); // Disable interrupts
+    safePosL = posL;
+    safePosR = posR;
+    interrupts(); // Enable interrupts
+
+    
+    Serial.print("L1 = ");
+    Serial.print(safePosL*encoderCircumferenceRatio);
+    Serial.print(" ");
+    Serial.print(L1);
+    Serial.print(" | ");
+    Serial.print("L2 = ");
+    Serial.print(safePosR*encoderCircumferenceRatio);
+    Serial.print(" ");
+    Serial.println(L2);
+
+    setMotor(leftDir, 75, PWM_L, IN1_L, IN2_L);
+    setMotor(rightDir, 75, PWM_R, IN1_R, IN2_R);
+    
+    
+
+    if (safePosL*encoderCircumferenceRatio >= L1)
+    {
+      setMotor(-leftDir, 10, PWM_L, IN1_L, IN2_L);
+    }
+    if (safePosR*encoderCircumferenceRatio <= L2)
+    {
+      setMotor(-rightDir, 10, PWM_R, IN1_R, IN2_R);
+    }
+  }
+  
+  Serial.println("Outside while loop");
+
+  jobDone = true;
+  }
+}
+
+void goHome()
+{
+  if(!jobDone)
+  {
+  while (safePosL > 0 || safePosR > 4215)
+  {
+    // Interrupt handling
     safePosL = 0;
     safePosR = 0;
     noInterrupts(); // Disable interrupts
@@ -160,24 +164,21 @@ void goSomeplace()
     safePosR = posR;
     interrupts(); // Enable interrupts
 
-    setMotor(leftDir, 150, PWM_L, IN1_L, IN2_L);
-    Serial.println(safePosL*encoderCircumferenceRatio);
-    Serial.println(safePosR*encoderCircumferenceRatio);
-    setMotor(rightDir, 150, PWM_R, IN1_R, IN2_R);
-    Serial.println(L1);
 
-    if (safePosL*encoderCircumferenceRatio >= L1)
+    setMotor(-leftDir, 150, PWM_L, IN1_L, IN2_L);
+    Serial.println(safePosL);
+    Serial.println(safePosR);
+    setMotor(-rightDir, 150, PWM_R, IN1_R, IN2_R);
+
+    if (safePosL > 0)
     {
       setMotor(leftDir, 0, PWM_L, IN1_L, IN2_L);
     }
-    if (safePosR*encoderCircumferenceRatio <= L2)
+    if (safePosR > 4215)
     {
       setMotor(rightDir, 0, PWM_R, IN1_R, IN2_R);
     }
   }
-  
-  Serial.println("Outside while loop");
-
   jobDone = true;
   }
 }
@@ -199,10 +200,24 @@ void setMotor(int dir, int pwmVal, int pwm, int in1, int in2){
   }  
 }
 
+void getEncoderVals()
+{
+// Interrupt handling
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    safePosL = posL;
+    safePosR = posR;
+  }
+  Serial.print("safePosL = ");
+  Serial.print(safePosL);
+  Serial.print(" ");
+  Serial.print("safePosR = ");
+  Serial.println(safePosR);
+}
+
 void teleport()
 {
   unsigned long startTime = millis();
-  int runtime = 500;
+  int runtime = 200;
   if (Serial.available() > 0) {
     int inData = Serial.read();
     if (inData == 'j')
@@ -211,7 +226,7 @@ void teleport()
       {
         setMotor(1, 150, PWM_L, IN1_L, IN2_L);
       }
-      setMotor(2, 150, PWM_L, IN1_L, IN2_L);
+      setMotor(1, 0, PWM_L, IN1_L, IN2_L);
       
     }else if(inData == 'n')
     {
@@ -219,28 +234,113 @@ void teleport()
       {
         setMotor(-1, 150, PWM_L, IN1_L, IN2_L);
       }
-      setMotor(2, 150, PWM_L, IN1_L, IN2_L);
+      setMotor(-1, 0, PWM_L, IN1_L, IN2_L);
     }else if(inData == 'k')
     {
        while (startTime + runtime > millis() )
       {
         setMotor(1, 150, PWM_R, IN1_R, IN2_R);
       }
-      setMotor(2, 150, PWM_R, IN1_R, IN2_R);
+      setMotor(1, 0, PWM_R, IN1_R, IN2_R);
     }else if(inData == 'm')
     {
        while (startTime + runtime > millis() )
       {
         setMotor(-1, 150, PWM_R, IN1_R, IN2_R);
       }
-      setMotor(2, 150, PWM_R, IN1_R, IN2_R);
+      setMotor(-1, 0, PWM_R, IN1_R, IN2_R);
     }
   }
 }
 
+void runEncoder()
+{
+  unsigned long startTime = millis();
+  int runtime = 200;
+  int counts = 140;
+  if (Serial.available() > 0) {
+    int inData = Serial.read();
+    if (inData == 'j')
+    {
+      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      safePosL = posL;
+      safePosR = posR;
+      }
+      while (safePosL < counts)
+      {
+        ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        safePosL = posL;
+        safePosR = posR;
+        }
+        setMotor(-1, 100, PWM_L, IN1_L, IN2_L);
+
+        Serial.print("safePosL = ");
+        Serial.print(safePosL);
+        Serial.print(" ");
+        Serial.print("safePosR = ");
+        Serial.println(safePosR);
+        if(safePosL >= counts)
+        {
+        setMotor(1, 20, PWM_L, IN1_L, IN2_L);
+        Serial.print("safePosL = ");
+        Serial.print(safePosL);
+        Serial.print(" ");
+        Serial.print("safePosR = ");
+        Serial.println(safePosR);
+        }
+      }
+    }else if (inData == 'n')
+    {
+      while (safePosR > counts)
+      {
+        ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    safePosL = posL;
+    safePosR = posR;
+  }
+        setMotor(1, 100, PWM_L, IN1_L, IN2_L);
+
+        Serial.print("safePosL = ");
+        Serial.print(safePosL);
+        Serial.print(" ");
+        Serial.print("safePosR = ");
+        Serial.println(safePosR);
+        if(safePosR == counts)
+        {
+          setMotor(-1, 0, PWM_R, IN1_R, IN2_R);
+                Serial.print("safePosL = ");
+        Serial.print(safePosL);
+        Serial.print(" ");
+        Serial.print("safePosR = ");
+        Serial.println(safePosR);
+        }
+      }
+    }else if(inData == 'k')
+    {
+       while (startTime + runtime > millis() )
+      {
+        setMotor(1, 150, PWM_R, IN1_R, IN2_R);
+        safePosL = 0;
+        safePosR = 0;
+      }
+      setMotor(1, 0, PWM_R, IN1_R, IN2_R);
+    }else if(inData == 'm')
+    {
+       while (startTime + runtime > millis() )
+      {
+        setMotor(-1, 150, PWM_R, IN1_R, IN2_R);
+        safePosL = 0;
+        safePosR = 0;
+      }
+      setMotor(-1, 0, PWM_R, IN1_R, IN2_R);
+    }
+    
+    
+  }
+}
+
 void encoder_ISR_L(){
-  int b = digitalRead(ENCB_L);
-  if(b > 0){
+  int encL = digitalRead(ENCB_L);
+  if(encL > 0){
     posL++;
   }
   else{
@@ -249,11 +349,11 @@ void encoder_ISR_L(){
 }
 
 void encoder_ISR_R(){
-  int c = digitalRead(ENCB_R);
-  if(c > 0){
-    posR--;
+  int encR = digitalRead(ENCB_R);
+  if(encR > 0){
+    posR++;
   }
   else{
-    posR++;
+    posR--;
   }
 }
