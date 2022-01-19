@@ -1,8 +1,8 @@
-#include <util/atomic.h> // For the ATOMIC_BLOCK macro
+#include "motorControl.h"
 
 // Left encoder pins
-#define ENCA_L 18
-#define ENCB_L 19
+#define ENCA_L 19
+#define ENCB_L 18
 
 // Right encoder pins
 #define ENCA_R 3
@@ -27,6 +27,9 @@ int safePosR = 0;
 int leftDir = 1;
 int rightDir = 1;
 
+leftM MotorControl;
+rightM MotorControl;
+
 // Kinematics
 #define PI 3.14159265359
 
@@ -37,7 +40,7 @@ double L2 = 2330; // Length of right string mm
 const double c = 2310; // Length of top aluminium bar mm
 const double r = 20; // Radius of wire wheel in mm
 const double circumference = 2*PI*r; // Circumference of string wheel mm (2*pi*r)
-const double encoderCountsPerRev = 310;
+const double encoderCountsPerRev = 330;
 const double encoderCircumferenceRatio = circumference/encoderCountsPerRev;
 
 bool jobDone = false;
@@ -67,37 +70,91 @@ void setup() {
 }
 
 void loop() {
-  teleport();
+  //teleport();
   //goSomeplace();
   //delay(1000);
   //jobDone = false;
   //goHome();
   //getEncoderVals();
   //runEncoder();
-  //pid();
+  //pid_L();
+  //pid_R();
 }
 
-void pid()
+void pid_L()
 {
-  // set target position
-  //int target = 1200;
-
   long prevT = 0;
   float eprev = 0;
   float eintegral = 0;
 
-
-
   // PID constants
-  float kp = 0.35;
-  float ki = 0.06;
-  float kd = 0.01;
+  float kp = 1;
+  float ki = 0.05;
+  float kd = 0.06;
 
   // time difference
   long currT = micros();
   float deltaT = ((float) (currT - prevT))/( 1.0e6 );
   prevT = currT;
-  int target = 330;//1000*sin(prevT/1e6);
+  int target = 4*330;//1000*sin(prevT/1e6);
+  // Read the position
+  int safePosL = 0;
+  noInterrupts(); // disable interrupts temporarily while reading
+  safePosL = posL;
+  interrupts(); // turn interrupts back on
+  
+  // error
+  int e = safePosL - target;
+
+  // derivative
+  float dedt = (e-eprev)/(deltaT);
+
+  // integral
+  eintegral = eintegral + e*deltaT;
+
+  // control signal
+  float u = kp*e + kd*dedt + ki*eintegral;
+
+  // motor power
+  float pwr = fabs(u);
+  if( pwr > 100 ){
+    pwr = 100;
+  }
+
+  // motor direction
+  int dir = 1;
+  if(u<0){
+    dir = -1;
+  }
+
+  // signal the motor
+  setMotor(dir,pwr,PWM_L,IN1_L,IN2_L);
+
+  // store previous error
+  eprev = e;
+
+  Serial.print(target);
+  Serial.print(" ");
+  Serial.print(safePosL);
+  Serial.println();
+}
+
+void pid_R()
+{
+  long prevT = 0;
+  float eprev = 0;
+  float eintegral = 0;
+
+  // PID constants
+  float kp = 0.8;
+  float ki = 1;
+  float kd = 0.6;
+
+  // time difference
+  long currT = micros();
+  float deltaT = ((float) (currT - prevT))/( 1.0e6 );
+  prevT = currT;
+  int target = 2626;//1000*sin(prevT/1e6);
   // Read the position
   int safePosR = 0; 
   noInterrupts(); // disable interrupts temporarily while reading
@@ -130,7 +187,6 @@ void pid()
 
   // signal the motor
   setMotor(dir,pwr,PWM_R,IN1_R,IN2_R);
-
 
   // store previous error
   eprev = e;
@@ -215,40 +271,6 @@ void goSomeplace()
   }
 }
 
-void goHome()
-{
-  if(!jobDone)
-  {
-  while (safePosL > 0 || safePosR > 4215)
-  {
-    // Interrupt handling
-    safePosL = 0;
-    safePosR = 0;
-    noInterrupts(); // Disable interrupts
-    safePosL = posL;
-    safePosR = posR;
-    interrupts(); // Enable interrupts
-
-
-    setMotor(-leftDir, 150, PWM_L, IN1_L, IN2_L);
-    Serial.println(safePosL);
-    Serial.println(safePosR);
-    setMotor(-rightDir, 150, PWM_R, IN1_R, IN2_R);
-
-    if (safePosL > 0)
-    {
-      setMotor(leftDir, 0, PWM_L, IN1_L, IN2_L);
-    }
-    if (safePosR > 4215)
-    {
-      setMotor(rightDir, 0, PWM_R, IN1_R, IN2_R);
-    }
-  }
-  jobDone = true;
-  }
-}
-
-
 void setMotor(int dir, int pwmVal, int pwm, int in1, int in2){
   analogWrite(pwm,pwmVal);
   if(dir == 1){
@@ -267,11 +289,11 @@ void setMotor(int dir, int pwmVal, int pwm, int in1, int in2){
 
 void getEncoderVals()
 {
-// Interrupt handling
-  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-    safePosL = posL;
-    safePosR = posR;
-  }
+  // Interrupt handling
+  noInterrupts(); // Disable interrupts
+  safePosL = posL;
+  safePosR = posR;
+  interrupts(); // Enable interrupts
   Serial.print("safePosL = ");
   Serial.print(safePosL);
   Serial.print(" ");
@@ -327,10 +349,11 @@ void runEncoder()
     int inData = Serial.read();
     if (inData == 'j')
     {
-      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      // Interrupt handling
+      noInterrupts(); // Disable interrupts
       safePosL = posL;
       safePosR = posR;
-      }
+      interrupts(); // Enable interrupts
       while (safePosR < counts)
       {
         ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
@@ -358,10 +381,11 @@ void runEncoder()
     {
       while (safePosR > counts)
       {
-        ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-    safePosL = posL;
-    safePosR = posR;
-  }
+        // Interrupt handling
+        noInterrupts(); // Disable interrupts
+        safePosL = posL;
+        safePosR = posR;
+        interrupts(); // Enable interrupts
         setMotor(1, 100, PWM_L, IN1_L, IN2_L);
 
         Serial.print("safePosL = ");
