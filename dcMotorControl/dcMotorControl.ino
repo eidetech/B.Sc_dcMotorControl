@@ -67,13 +67,78 @@ void setup() {
 }
 
 void loop() {
-  //teleport();
+  teleport();
   //goSomeplace();
   //delay(1000);
   //jobDone = false;
   //goHome();
   //getEncoderVals();
-  runEncoder();
+  //runEncoder();
+  //pid();
+}
+
+void pid()
+{
+  // set target position
+  //int target = 1200;
+
+  long prevT = 0;
+  float eprev = 0;
+  float eintegral = 0;
+
+
+
+  // PID constants
+  float kp = 0.35;
+  float ki = 0.06;
+  float kd = 0.01;
+
+  // time difference
+  long currT = micros();
+  float deltaT = ((float) (currT - prevT))/( 1.0e6 );
+  prevT = currT;
+  int target = 330;//1000*sin(prevT/1e6);
+  // Read the position
+  int safePosR = 0; 
+  noInterrupts(); // disable interrupts temporarily while reading
+  safePosR = posR;
+  interrupts(); // turn interrupts back on
+  
+  // error
+  int e = safePosR - target;
+
+  // derivative
+  float dedt = (e-eprev)/(deltaT);
+
+  // integral
+  eintegral = eintegral + e*deltaT;
+
+  // control signal
+  float u = kp*e + kd*dedt + ki*eintegral;
+
+  // motor power
+  float pwr = fabs(u);
+  if( pwr > 100 ){
+    pwr = 100;
+  }
+
+  // motor direction
+  int dir = 1;
+  if(u<0){
+    dir = -1;
+  }
+
+  // signal the motor
+  setMotor(dir,pwr,PWM_R,IN1_R,IN2_R);
+
+
+  // store previous error
+  eprev = e;
+
+  Serial.print(target);
+  Serial.print(" ");
+  Serial.print(safePosR);
+  Serial.println();
 }
 
 void goSomeplace()
@@ -257,7 +322,7 @@ void runEncoder()
 {
   unsigned long startTime = millis();
   int runtime = 200;
-  int counts = 140;
+  int counts = 330;
   if (Serial.available() > 0) {
     int inData = Serial.read();
     if (inData == 'j')
@@ -266,22 +331,22 @@ void runEncoder()
       safePosL = posL;
       safePosR = posR;
       }
-      while (safePosL < counts)
+      while (safePosR < counts)
       {
         ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         safePosL = posL;
         safePosR = posR;
         }
-        setMotor(-1, 100, PWM_L, IN1_L, IN2_L);
+        setMotor(-1, 150, PWM_R, IN1_R, IN2_R);
 
         Serial.print("safePosL = ");
         Serial.print(safePosL);
         Serial.print(" ");
         Serial.print("safePosR = ");
         Serial.println(safePosR);
-        if(safePosL >= counts)
+        if(safePosR >= counts)
         {
-        setMotor(1, 20, PWM_L, IN1_L, IN2_L);
+        setMotor(1, 0, PWM_R, IN1_R, IN2_R);
         Serial.print("safePosL = ");
         Serial.print(safePosL);
         Serial.print(" ");
