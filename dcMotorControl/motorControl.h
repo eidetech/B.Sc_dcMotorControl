@@ -36,8 +36,8 @@ public:
     float ki_L = 0.1;
     float kd_L = 0;
 
-    float kp_R = 1;
-    float ki_R = 0.1;
+    float kp_R = 0.37;
+    float ki_R = 0;
     float kd_R = 0;
 
     long t_prev = 0;

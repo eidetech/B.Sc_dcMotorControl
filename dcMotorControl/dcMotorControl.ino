@@ -1,5 +1,11 @@
 #include "motorControl.h"
 
+// ROS Config
+#include <ros.h>
+#include <std_msgs/Float32MultiArray.h>
+
+ros::NodeHandle nh;
+
 int safePosL = 0;
 int safePosR = 0;
 int posLLocal = 0;
@@ -13,8 +19,8 @@ MotorControl leftM, rightM;
 // Kinematics
 #define PI 3.14159265359
 
-double px = 400;
-double py = 400;
+double px = 100;
+double py = 100;
 double L1_start = 140; // Length of left string mm
 double L2_start = 2960 - 140; // Length of right string mm
 double L1 = 0;
@@ -27,22 +33,58 @@ const double resolution = circumference/encoderCountsPerRev;
 
 bool jobDone = false;
 
+void messageCb( const std_msgs::Float32MultiArray& ps4Buttons){
+  if(ps4Buttons.data[5] > 0.5)
+  {
+    digitalWrite(13, HIGH);
+  }else
+  {
+    digitalWrite(13, LOW);
+  }
+
+  if(ps4Buttons.data[0] < 0.0)
+  {
+    px++;
+  }else if(ps4Buttons.data[0] > 0.0)
+  {
+    px--;
+  }else if(ps4Buttons.data[1] < 0.0)
+  {
+    py++;
+  }else if(ps4Buttons.data[1] > 0.0)
+  {
+    py--;
+  }
+}
+
+ros::Subscriber<std_msgs::Float32MultiArray> sub("/ps4data", &messageCb);
+
 void setup() {
-  Serial.begin(9600);
+  //Serial.begin(9600);
+  nh.initNode();
+  nh.subscribe(sub);
 }
 
 
 
 void loop() {
-  
-  px++;
+  nh.spinOnce();
 
   L1 = sqrt(px*px+py*py) - L1_start;
   L2 = sqrt((c-px)*(c-px)+py*py) - L2_start;
+
+  leftM.pid(int(round(L1/resolution)), 0, LEFT);
+  rightM.pid(0, -int(round(L2/resolution)), RIGHT);
+  
   //teleport();
-  down();
+  //down();
   //up();
   //getEncoderVals();   
+}
+
+void receiveROSmessages()
+{
+  
 }
 
 void up()
