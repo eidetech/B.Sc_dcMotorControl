@@ -26,17 +26,17 @@ public:
     MotorControl();
     ~MotorControl();
 
-    void pid(float setpointL, float setpointR, motor motorSide);
+    float pid(float setpointL, float setpointR, motor motorSide);
     static void encoder_ISR_L();
     static void encoder_ISR_R();
     void runMotor(int dir, int pwmVal, int pwmPin, int in1, int in2);
 
     // PID parameters
-    float kp_L = 1;
-    float ki_L = 0.1;
+    float kp_L = 4;
+    float ki_L = 0;
     float kd_L = 0;
 
-    float kp_R = 0.37;
+    float kp_R = 3;
     float ki_R = 0;
     float kd_R = 0;
 

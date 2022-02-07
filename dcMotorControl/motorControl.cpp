@@ -31,7 +31,7 @@ MotorControl::~MotorControl()
 {
 }
 
-void MotorControl::pid(float setpointL, float setpointR, motor motorSide)
+float MotorControl::pid(float setpointL, float setpointR, motor motorSide)
 {
     // Time calculation
     unsigned long t = micros();
@@ -63,7 +63,7 @@ void MotorControl::pid(float setpointL, float setpointR, motor motorSide)
         // motor power
         float pwr = fabs(u);
         if( pwr > 100 ){
-        pwr = 100;
+        pwr = 80;
         }
 
         // motor direction
@@ -77,7 +77,7 @@ void MotorControl::pid(float setpointL, float setpointR, motor motorSide)
 
         // store previous error
         eprev = e;
-
+        return e;
 
 
 
@@ -98,7 +98,7 @@ void MotorControl::pid(float setpointL, float setpointR, motor motorSide)
         // motor power
         float pwr = fabs(u);
         if( pwr > 100 ){
-        pwr = 100;
+        pwr = 120;
         }
 
         // motor direction
@@ -112,11 +112,8 @@ void MotorControl::pid(float setpointL, float setpointR, motor motorSide)
 
         // store previous error
         eprev = e;
+        return e;
 
-        Serial.print(setpointR);
-        Serial.print(" ");
-        Serial.print(safePosR);
-        Serial.println();
     }
 
 
